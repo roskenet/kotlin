@@ -708,7 +708,7 @@ public inline fun <K, V, M : MutableMap<in K, in V>> CharSequence.associateTo(de
  */
 @SinceKotlin("1.3")
 public inline fun <V> CharSequence.associateWith(valueSelector: (Char) -> V): Map<Char, V> {
-    val result = LinkedHashMap<Char, V>(mapCapacity(length).coerceAtLeast(16))
+    val result = LinkedHashMap<Char, V>(mapCapacity(length.coerceAtMost(128)).coerceAtLeast(16))
     return associateWithTo(result, valueSelector)
 }
 

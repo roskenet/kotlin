@@ -470,13 +470,18 @@ object Snapshots : TemplateGroupBase() {
             else -> "samples.collections.Collections.Transformations.associateWith"
         })
         body {
-            val resultMap = when (family) {
-                Iterables -> "LinkedHashMap<K, V>(mapCapacity(collectionSizeOrDefault(10)).coerceAtLeast(16))"
-                CharSequences -> "LinkedHashMap<K, V>(mapCapacity(length).coerceAtLeast(16))"
-                else -> "LinkedHashMap<K, V>()"
+            val capacity = when (family) {
+                Iterables -> "mapCapacity(collectionSizeOrDefault(10)).coerceAtLeast(16)"
+                CharSequences -> "mapCapacity(length.coerceAtMost(128)).coerceAtLeast(16)"
+                ArraysOfObjects, ArraysOfPrimitives, ArraysOfUnsigned -> if (primitive == PrimitiveType.Char) {
+                    "mapCapacity(size.coerceAtMost(128)).coerceAtLeast(16)"
+                } else {
+                    "mapCapacity(size).coerceAtLeast(16)"
+                }
+                else -> ""
             }
             """
-            val result = $resultMap
+            val result = LinkedHashMap<K, V>($capacity)
             return associateWithTo(result, valueSelector)
             """
         }
