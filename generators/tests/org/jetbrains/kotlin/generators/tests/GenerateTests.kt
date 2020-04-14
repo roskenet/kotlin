@@ -239,6 +239,18 @@ fun main(args: Array<String>) {
             // TODO: implement mapping logic for terminal operations
             model("sequence/streams/sequence", excludeDirs = listOf("terminal"))
         }
+
+        testClass<AbstractContinuationStackTraceTest> {
+            model("continuation")
+        }
+
+        testClass<AbstractXCoroutinesStackTraceTest> {
+            model("xcoroutines")
+        }
+
+        testClass<AbstractXCoroutines134StackTraceTest> {
+            model("xcoroutines134")
+        }
     }
 
     testGroup("idea/tests", "idea/testData") {

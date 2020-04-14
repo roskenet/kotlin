@@ -101,6 +101,9 @@ public class ForTestCompileRuntime {
     }
 
     @NotNull
+    public static File mavenDependencyForTests(String path) { return assertExists(new File(path)); }
+
+    @NotNull
     public static File coroutinesCompatForTests() {
         return assertExists(new File("dist/kotlinc/lib/kotlin-coroutines-experimental-compat.jar"));
     }
