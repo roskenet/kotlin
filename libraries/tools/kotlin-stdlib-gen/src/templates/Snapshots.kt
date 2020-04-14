@@ -55,7 +55,6 @@ object Snapshots : TemplateGroupBase() {
                     1 -> setOf(if (this is List) this[0] else iterator().next())
                     else -> toCollection(LinkedHashSet<T>(mapCapacity(size)))
                 }
-
             }
             return toCollection(LinkedHashSet<T>()).optimizeReadOnlySet()
             """
@@ -63,12 +62,13 @@ object Snapshots : TemplateGroupBase() {
         body(Sequences) { "return toCollection(LinkedHashSet<T>()).optimizeReadOnlySet()" }
 
         body(CharSequences, ArraysOfObjects, ArraysOfPrimitives) {
-            val size = if (f == CharSequences) "length" else "size"
+            val size = f.code.size
+            val capacity = if (f == CharSequences || primitive == PrimitiveType.Char) "$size.coerceAtMost(128)" else size
             """
             return when ($size) {
                 0 -> emptySet()
                 1 -> setOf(this[0])
-                else -> toCollection(LinkedHashSet<T>(mapCapacity($size)))
+                else -> toCollection(LinkedHashSet<T>(mapCapacity($capacity)))
             }
             """
         }

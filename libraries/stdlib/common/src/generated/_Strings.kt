@@ -772,7 +772,7 @@ public fun CharSequence.toSet(): Set<Char> {
     return when (length) {
         0 -> emptySet()
         1 -> setOf(this[0])
-        else -> toCollection(LinkedHashSet<Char>(mapCapacity(length)))
+        else -> toCollection(LinkedHashSet<Char>(mapCapacity(length.coerceAtMost(128))))
     }
 }
 
