@@ -16,11 +16,13 @@ import org.jetbrains.kotlin.resolve.calls.inference.model.*
 import org.jetbrains.kotlin.resolve.calls.model.*
 import org.jetbrains.kotlin.types.*
 import org.jetbrains.kotlin.types.checker.intersectTypes
+import org.jetbrains.kotlin.types.checker.intersectWrappedTypes
 import org.jetbrains.kotlin.types.model.KotlinTypeMarker
 import org.jetbrains.kotlin.types.model.TypeConstructorMarker
 import org.jetbrains.kotlin.types.model.TypeVariableMarker
 import org.jetbrains.kotlin.types.typeUtil.asTypeProjection
 import org.jetbrains.kotlin.types.typeUtil.builtIns
+import org.jetbrains.kotlin.types.typeUtil.contains
 import org.jetbrains.kotlin.utils.addIfNotNull
 import org.jetbrains.kotlin.utils.addToStdlib.safeAs
 import kotlin.collections.LinkedHashSet
@@ -184,21 +186,6 @@ class KotlinConstraintSystemCompleter(
         topLevelType: UnwrappedType
     ) = postponedArguments.map { argument -> fixVariablesInsideArgument(argument, topLevelAtoms, completionMode, topLevelType) }
         .all { it } && postponedArguments.size != 0
-
-    fun Context.foundFunctionTypes2(
-        v: VariableWithConstraints,
-        typeVariablesSeen: MutableSet<TypeVariableTypeConstructor> = mutableSetOf()
-    ): KotlinType? {
-        if (typeVariablesSeen.contains(v.typeVariable.freshTypeConstructor() as TypeVariableTypeConstructor)) return null
-        typeVariablesSeen.add(v.typeVariable.freshTypeConstructor() as TypeVariableTypeConstructor)
-        return v.constraints.mapNotNull {
-            if ((it.type as KotlinType).isBuiltinFunctionalType && it.type.arguments.dropLast(1).all { it.type.constructor !is TypeVariableTypeConstructor } && (it.kind == ConstraintKind.EQUALITY || it.kind == ConstraintKind.LOWER)) {
-                it.type
-            } else if (it.type.constructor in notFixedTypeVariables) {
-                foundFunctionTypes2(notFixedTypeVariables[it.type.constructor]!!, typeVariablesSeen)
-            } else null
-        }.firstOrNull()
-    }
 
     private fun Context.collectLambdaParameterTypes(argument: LambdaWithTypeVariableAsExpectedTypeAtom) {
         this as NewConstraintSystem
@@ -508,27 +495,69 @@ class KotlinConstraintSystemCompleter(
     ): PostponedResolvedAtom {
         if (variable !in c.notFixedTypeVariables) return this
 
-        val foundFunctionTypes = mutableSetOf<KotlinType>()
-        c.foundFunctionType(c.notFixedTypeVariables.getValue(variable), foundFunctionTypes)
+        val functionalTypes = mutableSetOf<KotlinType>()
+        val typeApproximator = TypeApproximator(variable.builtIns)
 
-        if (foundFunctionTypes.isEmpty()) return this
-        val resultFunctionType = foundFunctionTypes.first()
+        c.foundFunctionType(c.notFixedTypeVariables.getValue(variable), functionalTypes)
+        val functionalType = if (functionalTypes.isEmpty()) {
+            resultTypeResolver.findResultType(
+                c,
+                c.notFixedTypeVariables.getValue(variable),
+                TypeVariableDirectionCalculator.ResolveDirection.TO_SUPERTYPE
+            ) as KotlinType
+        } else {
+            functionalTypes.first()
+        }
+        if (!functionalType.isSuitable()) return this
 
-        val isExtensionFunction = resultFunctionType.isExtensionFunctionType
+        val isExtensionFunction = functionalType.isExtensionFunctionType
         val isExtensionFunctionWithReceiverAsDeclaredParameter =
-            isExtensionFunction && resultFunctionType.arguments.size - 1 == parameterTypes?.filterNotNull()?.size
+            isExtensionFunction && functionalType.arguments.size - 1 == parameterTypes?.filterNotNull()?.size
         if (parameterTypes?.all { type -> type != null } == true && (!isExtensionFunction || isExtensionFunctionWithReceiverAsDeclaredParameter)) return this
 
-        if (foundFunctionTypes.isEmpty()) return this
+        val arguments = if (functionalTypes.isEmpty()) {
+            functionalType.arguments.dropLast(1).toMutableList()
+        } else {
+            val arguments = mutableListOf<MutableList<UnwrappedType>>()
+
+            for (f in functionalTypes) {
+                for ((i, a) in f.arguments.dropLast(1).withIndex()) {
+                    if (arguments.size <= i) {
+                        arguments.add(mutableListOf())
+                    }
+                    arguments[i].add(a.type as UnwrappedType)
+                }
+            }
+
+
+            val result = arguments.map {
+                val properTypes = it.filter { it.constructor !is TypeVariableTypeConstructor }
+
+                if (properTypes.isEmpty()) return this
+                if (properTypes.size == 1) return@map properTypes.single().asTypeProjection()
+
+                val interTypes = intersectTypes(properTypes)
+
+                if (interTypes.contains { with (c) { (it.constructor as TypeConstructorMarker).isIntersection() } }) {
+                    typeApproximator.approximateToSubType(
+                        intersectTypes(properTypes),
+                        TypeApproximatorConfiguration.PublicDeclaration
+                    )?.asTypeProjection() ?: return this
+                } else interTypes.asTypeProjection()
+            }
+
+            result
+        }
+
         val returnVariable = typeVariableCreator()
         csBuilder.registerVariable(returnVariable)
 
         val expectedType =
             KotlinTypeFactory.simpleType(
-                resultFunctionType.annotations,
-                resultFunctionType.constructor,
-                resultFunctionType.arguments.dropLast(1) + returnVariable.defaultType.asTypeProjection(),
-                resultFunctionType.isMarkedNullable
+                functionalType.annotations,
+                functionalType.constructor,
+                arguments + returnVariable.defaultType.asTypeProjection(),
+                functionalType.isMarkedNullable
             )
 
         csBuilder.addSubtypeConstraint(

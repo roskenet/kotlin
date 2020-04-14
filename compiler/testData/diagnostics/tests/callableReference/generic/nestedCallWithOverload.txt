@@ -4,6 +4,7 @@ public fun </*0*/ T> baz1(/*0*/ x: T, /*1*/ y: T): T
 public fun </*0*/ T> baz2(/*0*/ x: T, /*1*/ y: Inv<T>): T
 public fun foo(/*0*/ i: kotlin.Int): kotlin.Unit
 public fun foo(/*0*/ s: kotlin.String): kotlin.Unit
+public fun foo2(/*0*/ i: kotlin.Int): kotlin.Unit
 public fun </*0*/ K> id(/*0*/ x: K): K
 public fun </*0*/ K> id1(/*0*/ x: K): K
 public fun </*0*/ L> id2(/*0*/ x: L): L
@@ -12,6 +13,7 @@ public fun test1(): kotlin.Unit
 
 public final class Inv</*0*/ T> {
     public constructor Inv</*0*/ T>(/*0*/ x: T)
+    public final val x: T
     public open override /*1*/ /*fake_override*/ fun equals(/*0*/ other: kotlin.Any?): kotlin.Boolean
     public open override /*1*/ /*fake_override*/ fun hashCode(): kotlin.Int
     public open override /*1*/ /*fake_override*/ fun toString(): kotlin.String

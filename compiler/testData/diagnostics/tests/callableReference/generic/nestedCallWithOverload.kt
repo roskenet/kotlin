@@ -3,6 +3,7 @@
 
 fun foo(i: Int) {}
 fun foo(s: String) {}
+fun foo2(i: Int) {}
 fun <K> id(x: K): K = x
 fun <K> id1(x: K): K = x
 fun <L> id2(x: L): L = x
@@ -10,7 +11,7 @@ fun <T> baz1(x: T, y: T): T = TODO()
 fun <T> baz2(x: T, y: Inv<T>): T = TODO()
 fun <T> select(vararg x: T) = x[0]
 
-class Inv<T>(x: T)
+class Inv<T>(val x: T)
 
 fun test1() {
     val x1: (Int) -> Unit = id(id(::foo))
@@ -31,4 +32,9 @@ fun test1() {
     baz2(id1 { <!DEBUG_INFO_EXPRESSION_TYPE("kotlin.Int")!>it<!>.inv() }, id2(Inv { x: Int -> }))
 
     select(id1 { <!DEBUG_INFO_EXPRESSION_TYPE("kotlin.Int")!>it<!>.inv() }, id1 { x: Number -> TODO() }, id1(id2 { x: Int -> x }))
+
+    select(id1 { <!DEBUG_INFO_EXPRESSION_TYPE("kotlin.Int")!>it<!>.inv() }, id1 { x: Number -> TODO() }, id1(id2(::foo2)))
+    select(id1 { x: Inv<out Number> -> TODO() }, id1 { <!DEBUG_INFO_EXPRESSION_TYPE("Inv<kotlin.Int>")!>it<!>.x.inv() }, id1 { x: Inv<Int> -> TODO() })
+
+    select(id1 { <!DEBUG_INFO_EXPRESSION_TYPE("kotlin.Nothing")!>it<!> }, id1 { x: Inv<Number> -> TODO() }, id1 { x: Inv<Int> -> TODO() })
 }
