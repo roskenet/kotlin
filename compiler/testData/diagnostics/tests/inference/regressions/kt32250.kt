@@ -14,13 +14,13 @@ class B(f: ((I) -> Unit)? = null)
 
 fun main() {
     val cond = true
-//    A(
-//        if (cond) {
-//            Pair(1, { baz -> baz.foo() })
-//        } else {
-//            null
-//        }
-//    )
+    A(
+        if (cond) {
+            Pair(1, { baz -> baz.foo() })
+        } else {
+            null
+        }
+    )
     B(
         if (cond) {
             { baz -> baz.foo() }

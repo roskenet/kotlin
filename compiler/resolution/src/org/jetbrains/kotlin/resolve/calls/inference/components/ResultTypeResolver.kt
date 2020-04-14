@@ -41,7 +41,7 @@ class ResultTypeResolver(
         }
     }
 
-    private fun findResultTypeOrNull(
+    fun findResultTypeOrNull(
         c: Context,
         variableWithConstraints: VariableWithConstraints,
         direction: ResolveDirection
