@@ -82,8 +82,11 @@ object Snapshots : TemplateGroupBase() {
         returns("HashSet<T>")
         body { "return toCollection(HashSet<T>(mapCapacity(collectionSizeOrDefault(12))))" }
         body(Sequences) { "return toCollection(HashSet<T>())" }
-        body(CharSequences) { "return toCollection(HashSet<T>(mapCapacity(length)))" }
-        body(ArraysOfObjects, ArraysOfPrimitives) { "return toCollection(HashSet<T>(mapCapacity(size)))" }
+        body(CharSequences, ArraysOfObjects, ArraysOfPrimitives) {
+            val size = f.code.size
+            val capacity = if (f == CharSequences || primitive == PrimitiveType.Char) "$size.coerceAtMost(128)" else size
+            "return toCollection(HashSet<T>(mapCapacity($capacity)))"
+        }
     }
 
     val f_toSortedSet = fn("toSortedSet()") {

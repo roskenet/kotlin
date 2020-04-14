@@ -9145,7 +9145,7 @@ public fun BooleanArray.toHashSet(): HashSet<Boolean> {
  * Returns a new [HashSet] of all elements.
  */
 public fun CharArray.toHashSet(): HashSet<Char> {
-    return toCollection(HashSet<Char>(mapCapacity(size)))
+    return toCollection(HashSet<Char>(mapCapacity(size.coerceAtMost(128))))
 }
 
 /**

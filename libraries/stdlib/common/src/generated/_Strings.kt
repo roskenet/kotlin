@@ -742,7 +742,7 @@ public fun <C : MutableCollection<in Char>> CharSequence.toCollection(destinatio
  * Returns a new [HashSet] of all characters.
  */
 public fun CharSequence.toHashSet(): HashSet<Char> {
-    return toCollection(HashSet<Char>(mapCapacity(length)))
+    return toCollection(HashSet<Char>(mapCapacity(length.coerceAtMost(128))))
 }
 
 /**
