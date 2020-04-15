@@ -42,7 +42,7 @@ if (includeJava9) {
 
 compileKotlin {
     kotlinOptions {
-        freeCompilerArgs = ["-version",
+        freeCompilerArgs += ["-version",
                             "-Xallow-kotlin-package",
                             "-Xnormalize-constructor-calls=enable",
                             "-module-name", "kotlin-reflection"]
