@@ -1,5 +1,3 @@
-// !WITH_NEW_INFERENCE
-
 interface A<out K> {
     fun foo(x: @UnsafeVariance K): Unit
 }
