@@ -79,7 +79,6 @@ class TypeVariableFromCallableDescriptor(
 }
 
 class TypeVariableForLambdaReturnType(
-    val lambdaArgument: LambdaKotlinCallArgument,
     builtIns: KotlinBuiltIns,
     name: String
 ) : NewTypeVariable(builtIns, name) {
@@ -87,7 +86,6 @@ class TypeVariableForLambdaReturnType(
 }
 
 class TypeVariableForLambdaInputType(
-    val lambdaArgument: LambdaKotlinCallArgument,
     builtIns: KotlinBuiltIns,
     name: String
 ) : NewTypeVariable(builtIns, name) {
@@ -95,6 +93,13 @@ class TypeVariableForLambdaInputType(
 }
 
 class TypeVariableForCallableReferenceReturnType(
+    builtIns: KotlinBuiltIns,
+    name: String
+) : NewTypeVariable(builtIns, name) {
+    override fun hasOnlyInputTypesAnnotation(): Boolean = false
+}
+
+class TypeVariableForCallableReferenceInputType(
     builtIns: KotlinBuiltIns,
     name: String
 ) : NewTypeVariable(builtIns, name) {

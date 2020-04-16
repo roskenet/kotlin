@@ -4,6 +4,7 @@
 fun foo(i: Int) {}
 fun foo(s: String) {}
 fun foo2(i: Int) {}
+fun foo3(i: Number) {}
 fun <K> id(x: K): K = x
 fun <K> id1(x: K): K = x
 fun <L> id2(x: L): L = x
@@ -36,5 +37,9 @@ fun test1() {
     select(id1 { <!DEBUG_INFO_EXPRESSION_TYPE("kotlin.Int")!>it<!>.inv() }, id1 { x: Number -> TODO() }, id1(id2(::foo2)))
     select(id1 { x: Inv<out Number> -> TODO() }, id1 { <!DEBUG_INFO_EXPRESSION_TYPE("Inv<kotlin.Int>")!>it<!>.x.inv() }, id1 { x: Inv<Int> -> TODO() })
 
-    select(id1 { <!DEBUG_INFO_EXPRESSION_TYPE("kotlin.Nothing")!>it<!> }, id1 { x: Inv<Number> -> TODO() }, id1 { x: Inv<Int> -> TODO() })
+    select(id1 { <!DEBUG_INFO_EXPRESSION_TYPE("{Inv<Int> & Inv<Number>}")!>it<!> }, id1 { x: Inv<Number> -> TODO() }, id1 { x: Inv<Int> -> TODO() })
+
+    <!DEBUG_INFO_EXPRESSION_TYPE("kotlin.reflect.KFunction1<kotlin.Int, kotlin.Unit>")!>select(id1(::foo), id(::foo3), id1(id2(::foo2)))<!>
+
+    select({ <!DEBUG_INFO_EXPRESSION_TYPE("kotlin.Int")!>it<!> }, { x: Int -> TODO() })
 }

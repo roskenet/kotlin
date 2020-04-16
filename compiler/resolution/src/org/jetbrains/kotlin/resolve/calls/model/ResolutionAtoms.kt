@@ -98,17 +98,31 @@ sealed class PostponedResolvedAtom : ResolvedAtom(), PostponedResolvedAtomMarker
     abstract override val inputTypes: Collection<UnwrappedType>
     abstract override val outputType: UnwrappedType?
     abstract val expectedType: UnwrappedType?
+    var expandedExpectedType: PostponedResolvedAtom? = null
+    var newExpectedType: UnwrappedType? = null
+    var returnValueVariable: NewTypeVariable? = null
+    var parameters3: List<List<UnwrappedType?>>? = null
+}
+
+interface AtomWithTypeVariableAsExpectedType {
+    var areParameterTypesLooked2: Boolean
+    var areParameterTypesLooked: Boolean
+    var preparedReturnType: NewTypeVariable?
+    val preparedParameterTypes: MutableList<NewTypeVariable>
 }
 
 class LambdaWithTypeVariableAsExpectedTypeAtom(
     override val atom: LambdaKotlinCallArgument,
     override val expectedType: UnwrappedType
-) : PostponedResolvedAtom() {
+) : PostponedResolvedAtom(), AtomWithTypeVariableAsExpectedType {
     override val inputTypes: Collection<UnwrappedType> get() = listOf(expectedType)
     override val outputType: UnwrappedType? get() = null
 
-    val preparedParameterTypes = mutableListOf<TypeVariableForLambdaInputType>()
-    var preparedReturnType: TypeVariableForLambdaReturnType? = null
+    override var areParameterTypesLooked = false
+    override var areParameterTypesLooked2 = false
+
+    override val preparedParameterTypes = mutableListOf<NewTypeVariable>()
+    override var preparedReturnType: NewTypeVariable? = null
 
     fun setAnalyzed(resolvedLambdaAtom: ResolvedLambdaAtom) {
         setAnalyzedResults(listOf(resolvedLambdaAtom))
@@ -186,7 +200,13 @@ class CallableReferenceWithTypeVariableAsExpectedTypeAtom(
 
 class PostponedCallableReferenceAtom(
     eagerCallableReferenceAtom: EagerCallableReferenceAtom
-) : AbstractPostponedCallableReferenceAtom(eagerCallableReferenceAtom.atom, eagerCallableReferenceAtom.expectedType)
+) : AbstractPostponedCallableReferenceAtom(eagerCallableReferenceAtom.atom, eagerCallableReferenceAtom.expectedType), AtomWithTypeVariableAsExpectedType {
+    override var areParameterTypesLooked = false
+    override var areParameterTypesLooked2 = false
+
+    override val preparedParameterTypes = mutableListOf<NewTypeVariable>()
+    override var preparedReturnType: NewTypeVariable? = null
+}
 
 class ResolvedCollectionLiteralAtom(
     override val atom: CollectionLiteralKotlinCallArgument,
