@@ -98,31 +98,24 @@ sealed class PostponedResolvedAtom : ResolvedAtom(), PostponedResolvedAtomMarker
     abstract override val inputTypes: Collection<UnwrappedType>
     abstract override val outputType: UnwrappedType?
     abstract val expectedType: UnwrappedType?
-    var expandedExpectedType: PostponedResolvedAtom? = null
-    var newExpectedType: UnwrappedType? = null
     var returnValueVariable: NewTypeVariable? = null
     var parameters3: List<List<UnwrappedType?>>? = null
 }
 
-interface AtomWithTypeVariableAsExpectedType {
-    var areParameterTypesLooked2: Boolean
+interface PostponedAtomWithRevisableExpectedType {
     var areParameterTypesLooked: Boolean
-    var preparedReturnType: NewTypeVariable?
-    val preparedParameterTypes: MutableList<NewTypeVariable>
+    var revisedExpectedType: UnwrappedType?
 }
 
 class LambdaWithTypeVariableAsExpectedTypeAtom(
     override val atom: LambdaKotlinCallArgument,
     override val expectedType: UnwrappedType
-) : PostponedResolvedAtom(), AtomWithTypeVariableAsExpectedType {
+) : PostponedResolvedAtom(), PostponedAtomWithRevisableExpectedType {
     override val inputTypes: Collection<UnwrappedType> get() = listOf(expectedType)
     override val outputType: UnwrappedType? get() = null
 
     override var areParameterTypesLooked = false
-    override var areParameterTypesLooked2 = false
-
-    override val preparedParameterTypes = mutableListOf<NewTypeVariable>()
-    override var preparedReturnType: NewTypeVariable? = null
+    override var revisedExpectedType: UnwrappedType? = null
 
     fun setAnalyzed(resolvedLambdaAtom: ResolvedLambdaAtom) {
         setAnalyzedResults(listOf(resolvedLambdaAtom))
@@ -192,20 +185,12 @@ sealed class AbstractPostponedCallableReferenceAtom(
         get() = extractInputOutputTypesFromCallableReferenceExpectedType(expectedType)?.outputType
 }
 
-class CallableReferenceWithTypeVariableAsExpectedTypeAtom(
-    atom: CallableReferenceKotlinCallArgument,
-    expectedType: UnwrappedType?,
-    val typeVariableForReturnType: TypeVariableForCallableReferenceReturnType?
-) : AbstractPostponedCallableReferenceAtom(atom, expectedType)
-
 class PostponedCallableReferenceAtom(
     eagerCallableReferenceAtom: EagerCallableReferenceAtom
-) : AbstractPostponedCallableReferenceAtom(eagerCallableReferenceAtom.atom, eagerCallableReferenceAtom.expectedType), AtomWithTypeVariableAsExpectedType {
+) : AbstractPostponedCallableReferenceAtom(eagerCallableReferenceAtom.atom, eagerCallableReferenceAtom.expectedType), PostponedAtomWithRevisableExpectedType {
     override var areParameterTypesLooked = false
-    override var areParameterTypesLooked2 = false
 
-    override val preparedParameterTypes = mutableListOf<NewTypeVariable>()
-    override var preparedReturnType: NewTypeVariable? = null
+    override var revisedExpectedType: UnwrappedType? = null
 }
 
 class ResolvedCollectionLiteralAtom(
