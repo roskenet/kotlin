@@ -158,44 +158,46 @@ class KotlinConstraintSystemCompleter(
         }.all { it } && types.size != 0
     }
 
-    private fun extractParameterTypesFromDeclaration(atom: ResolutionAtom): Array<UnwrappedType?>? {
+    private fun extractParameterTypesFromDeclaration(atom: ResolutionAtom): List<KotlinType?>? {
         return if (atom is FunctionExpression && atom.receiverType != null) {
-            arrayOf(atom.receiverType) + atom.parametersTypes
-        } else if (atom is LambdaKotlinCallArgument) atom.parametersTypes
+            listOf(atom.receiverType) + atom.parametersTypes.map { it }
+        } else if (atom is LambdaKotlinCallArgument) atom.parametersTypes?.map { it }
         else null
     }
 
-    data class Option(val baseType: KotlinType, val isSuspend: Boolean, val parameterTypes: List<List<UnwrappedType?>>?)
-
     private fun Context.extractParameterTypesFromConstraints(
-        argument: PostponedResolvedAtom
-    ): Option? {
-        val expectedTypeVariable = argument.expectedType!!.constructor
+        expectedTypeVariable: TypeConstructor
+    ): ExtractedParameterTypesInfo? {
         if (expectedTypeVariable !in notFixedTypeVariables) return null
 
-        val foundFunctionalTypes = findFunctionalTypesInConstraints(notFixedTypeVariables.getValue(expectedTypeVariable))
-        val baseFunctionalType = foundFunctionalTypes?.firstOrNull() ?: return null
+        val foundFunctionalTypes = findFunctionalTypesInConstraints(notFixedTypeVariables.getValue(expectedTypeVariable)) ?: return null
 
-        return Option(
-            baseFunctionalType,
-            foundFunctionalTypes.all { it.isSuspendFunctionTypeOrSubtype },
-            foundFunctionalTypes.map {
-                it.arguments.dropLast(1).map { it.type as UnwrappedType }
-            }
+        return ExtractedParameterTypesInfo(
+            null,
+            foundFunctionalTypes.map { it.arguments.dropLast(1).map { it.type } }.toSet(),
+            Annotations.create(foundFunctionalTypes.map { it.annotations }.flatten()),
+            foundFunctionalTypes.isNotEmpty() && foundFunctionalTypes.all { it.isSuspendFunctionTypeOrSubtype },
+            foundFunctionalTypes.isNotEmpty() && foundFunctionalTypes.all { it.isMarkedNullable }
         )
     }
 
-    private fun <T> Context.fixParameterTypes(
-        argument: T,
-        diagnosticsHolder: KotlinDiagnosticsHolder
-    ) where T : PostponedAtomWithRevisableExpectedType, T : PostponedResolvedAtom {
+    private fun Context.fixVariablesForParameterTypes(argument: PostponedAtomWithRevisableExpectedType) {
+        if (argument !is PostponedResolvedAtom) return
+
         if (argument.parameters3 != null) {
             argument.revisedExpectedType?.arguments?.dropLast(1)?.forEachIndexed { i, el ->
                 if (argument.parameters3!![i].all { it != null }) {
                     fixVariable(this, notFixedTypeVariables.getValue(el.type.constructor), listOf(argument))
                 }
             }
+        }
+    }
 
+    private fun Context.transformToAtomWithFunctionalExpectedType(
+        argument: PostponedAtomWithRevisableExpectedType,
+        diagnosticsHolder: KotlinDiagnosticsHolder
+    ) {
+        if (argument.parameters3 != null) {
             when (argument) {
                 is PostponedCallableReferenceAtom -> {
                     PostponedCallableReferenceAtom(
@@ -216,34 +218,58 @@ class KotlinConstraintSystemCompleter(
         }
     }
 
-    private fun <T> Context.collectParameterTypes(argument: T) where T : PostponedAtomWithRevisableExpectedType, T : PostponedResolvedAtom {
-        if (argument.areParameterTypesLooked) return
+    data class ExtractedParameterTypesInfo(
+        val parametersFromDeclaration: List<KotlinType?>?,
+        val parametersFromConstraints: Set<List<KotlinType>>?,
+        val annotations: Annotations,
+        val isSuspend: Boolean,
+        val isNullable: Boolean
+    ) {
+        companion object {
+            val EMPTY = ExtractedParameterTypesInfo(null, null, Annotations.EMPTY, false, false)
+        }
+    }
 
-        val atom = argument.atom ?: return
-        val parametersFromDeclaration = extractParameterTypesFromDeclaration(atom)?.toList()
-        val (baseFunctionalType, isSuspend, parametersFromConstraints) = extractParameterTypesFromConstraints(argument) ?: Option(
-            argument.expectedType!!,
-            false,
-            null
+    private fun Context.collectParameterTypes(argument: PostponedAtomWithRevisableExpectedType): ExtractedParameterTypesInfo? {
+        if (argument.areParameterTypesLooked) return null
+
+        val expectedType = argument.expectedType ?: return null
+        val atom = argument.atom
+
+        val parameterTypesInfoFromConstraints = extractParameterTypesFromConstraints(expectedType.constructor)
+
+        return ExtractedParameterTypesInfo(
+            parametersFromDeclaration = extractParameterTypesFromDeclaration(atom),
+            parametersFromConstraints = parameterTypesInfoFromConstraints?.parametersFromConstraints,
+            annotations = parameterTypesInfoFromConstraints?.annotations ?: Annotations.EMPTY,
+            isSuspend = parameterTypesInfoFromConstraints?.isSuspend ?: false,
+            isNullable = parameterTypesInfoFromConstraints?.isNullable ?: false,
         )
+    }
 
-        val al = if (parametersFromDeclaration != null && parametersFromConstraints != null) {
-            parametersFromConstraints + listOf(
-                if (baseFunctionalType.arguments.size - 1 > parametersFromDeclaration.size) {
-                    listOf(null) + parametersFromDeclaration
-                } else {
-                    parametersFromDeclaration
-                }
-            )
-        } else if (parametersFromDeclaration != null) {
-            listOf(parametersFromDeclaration)
-        } else parametersFromConstraints ?: return
+    private fun Context.addConstraintForParameters(
+        argument: PostponedAtomWithRevisableExpectedType,
+        extractedParameterTypesInfo: ExtractedParameterTypesInfo
+    ) {
+         val al = extractedParameterTypesInfo.run {
+             if (!parametersFromDeclaration.isNullOrEmpty() && !parametersFromConstraints.isNullOrEmpty()) {
+                 parametersFromConstraints + listOf(
+                     if (parametersFromConstraints.isNotEmpty() && parametersFromConstraints.first().size - 1 > parametersFromDeclaration.size) {
+                         listOf(null) + parametersFromDeclaration
+                     } else {
+                         parametersFromDeclaration
+                     }
+                 )
+             } else if (!parametersFromDeclaration.isNullOrEmpty()) {
+                 listOf(parametersFromDeclaration)
+             } else parametersFromConstraints
+         } ?: return
+
+        if (al.isEmpty()) return
 
         argument.areParameterTypesLooked = true
 
-        val allParameters = al.first().indices.map { i -> al.map { it[i] } }
-
-        // -------
+        val parameterTypes = al.first().indices.map { i -> al.map { it.getOrNull(i) } }
 
         val csBuilder = (this as NewConstraintSystem).getBuilder()
         val expectedTypeVariable = argument.expectedType!!
@@ -263,7 +289,7 @@ class KotlinConstraintSystemCompleter(
                 else -> null!!
             }
         }
-        val parameterVariables = allParameters.map { types ->
+        val parameterVariables = parameterTypes.map { types ->
             val parameterTypeVariable = typeVariableCreatorForInputType().apply { csBuilder.registerVariable(this) }
 
             types.forEach { type ->
@@ -280,27 +306,28 @@ class KotlinConstraintSystemCompleter(
         }
 
         val returnValueVariable = typeVariableCreatorForReturnType().apply { csBuilder.registerVariable(this) }
+        val isExtensionFunctionType = extractedParameterTypesInfo.annotations.hasAnnotation(KotlinBuiltIns.FQ_NAMES.extensionFunctionType)
 
         val newExpectedType =
             KotlinTypeFactory.simpleType(
-                if (baseFunctionalType.isBuiltinExtensionFunctionalType && parametersFromDeclaration?.size == baseFunctionalType.arguments.size - 1 && parametersFromDeclaration.all { it != null } && baseFunctionalType.arguments.first().type == parametersFromDeclaration.first()) {
-                    FilteredAnnotations(baseFunctionalType.annotations, true) { it != KotlinBuiltIns.FQ_NAMES.extensionFunctionType }
+                if (isExtensionFunctionType && extractedParameterTypesInfo.parametersFromDeclaration?.size == (extractedParameterTypesInfo.parametersFromConstraints?.firstOrNull()?.size ?: 0) && extractedParameterTypesInfo.parametersFromDeclaration.all { it != null } && extractedParameterTypesInfo.parametersFromConstraints?.firstOrNull()?.firstOrNull() == extractedParameterTypesInfo.parametersFromDeclaration.firstOrNull()) {
+                    FilteredAnnotations(extractedParameterTypesInfo.annotations, true) { it != KotlinBuiltIns.FQ_NAMES.extensionFunctionType }
                 } else if (argument.atom is FunctionExpression && (argument.atom as FunctionExpression).receiverType != null) {
-                    Annotations.create(baseFunctionalType.annotations + BuiltInAnnotationDescriptor(baseFunctionalType.builtIns, KotlinBuiltIns.FQ_NAMES.extensionFunctionType, emptyMap()))
-                } else baseFunctionalType.annotations,
+                    Annotations.create(extractedParameterTypesInfo.annotations + BuiltInAnnotationDescriptor(expectedTypeVariable.builtIns, KotlinBuiltIns.FQ_NAMES.extensionFunctionType, emptyMap()))
+                } else extractedParameterTypesInfo.annotations,
                 when (argument) {
                     is LambdaWithTypeVariableAsExpectedTypeAtom ->
-                        if (isSuspend) baseFunctionalType.builtIns.getSuspendFunction(parameterVariables.size) else baseFunctionalType.builtIns.getFunction(
+                        if (extractedParameterTypesInfo.isSuspend) expectedTypeVariable.builtIns.getSuspendFunction(parameterVariables.size) else expectedTypeVariable.builtIns.getFunction(
                             parameterVariables.size
                         )
                     is PostponedCallableReferenceAtom ->
-                        if (isSuspend) baseFunctionalType.builtIns.getKSuspendFunction(parameterVariables.size) else baseFunctionalType.builtIns.getKFunction(
+                        if (extractedParameterTypesInfo.isSuspend) expectedTypeVariable.builtIns.getKSuspendFunction(parameterVariables.size) else expectedTypeVariable.builtIns.getKFunction(
                             parameterVariables.size
                         )
                     else -> null!!
                 }.typeConstructor,
                 parameterVariables + returnValueVariable.defaultType.asTypeProjection(),
-                baseFunctionalType.isMarkedNullable
+                extractedParameterTypesInfo.isNullable
             )
 
         csBuilder.addSubtypeConstraint(
@@ -309,28 +336,23 @@ class KotlinConstraintSystemCompleter(
             ArgumentConstraintPosition(argument.atom as KotlinCallArgument)
         )
 
-        argument.parameters3 = allParameters
+        argument.parameters3 = parameterTypes
         argument.revisedExpectedType = newExpectedType
     }
 
-    private fun Context.collectParameterTypesForAllArguments(postponedArguments: List<PostponedResolvedAtom>) {
-        val postponedArgumentsFiltered = Stack<PostponedAtomWithRevisableExpectedType>().apply {
-            addAll(
-                postponedArguments.filter { it.expectedType?.constructor is TypeVariableTypeConstructor }
-                    .filterIsInstance<PostponedAtomWithRevisableExpectedType>()
-            )
-        }
+    private fun Context.collectParameterTypesForAllArguments(postponedArguments: List<PostponedAtomWithRevisableExpectedType>) {
+        val postponedArgumentsFiltered = Stack<PostponedAtomWithRevisableExpectedType>().apply { addAll(postponedArguments.filter { it.expectedType?.constructor is TypeVariableTypeConstructor }) }
 
         while (true) {
             val res = postponedArgumentsFiltered.any { argument ->
-                if (argument is PostponedResolvedAtom) {
-                    val a = argument.areParameterTypesLooked
-                    collectParameterTypes(argument)
+                val a = argument.areParameterTypesLooked
+                val info = collectParameterTypes(argument)
 
-                    if (!a && argument.areParameterTypesLooked) {
-                        true
-                    } else false
-                } else false
+                if (info != null) {
+                    addConstraintForParameters(argument, info)
+                }
+
+                !a && argument.areParameterTypesLooked
             }
 
             if (res) continue
@@ -351,7 +373,7 @@ class KotlinConstraintSystemCompleter(
             val postponedArguments = getOrderedNotAnalyzedPostponedArguments(topLevelAtoms)
 
             // Stage 1: collect parameter types from declaration and constraints
-            collectParameterTypesForAllArguments(postponedArguments)
+            collectParameterTypesForAllArguments(postponedArguments.filterIsInstance<PostponedAtomWithRevisableExpectedType>())
 
             // Stage 2: fix variables for parameter types
             if (completionMode == ConstraintSystemCompletionMode.FULL) {
@@ -360,15 +382,16 @@ class KotlinConstraintSystemCompleter(
                     .filterIsInstance<PostponedAtomWithRevisableExpectedType>()
 
                 for (argument in postponedArguments2) {
-                    if (argument is PostponedResolvedAtom) {
-                        fixParameterTypes(argument, diagnosticsHolder)
-                    }
+                    fixVariablesForParameterTypes(argument)
+                    transformToAtomWithFunctionalExpectedType(argument, diagnosticsHolder)
                 }
             }
 
             /*
-             * We should revise postponed arguments because they can be changed by the stage of fixation type variables for parameters,
-             * namely, postponed arguments with type variable as expected type can be replaced with resolved postponed arguments with functional expected type
+             * We should get not analyzed postponed arguments again because they can be changed by the stage of fixation type variables for parameters,
+             * namely, postponed arguments with type variable as expected type can be replaced with resolved postponed arguments with functional expected type.
+             *
+             * See `transformToAtomWithFunctionalExpectedType`
              */
             val revisedPostponedArguments = getOrderedNotAnalyzedPostponedArguments(topLevelAtoms)
 

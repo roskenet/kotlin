@@ -98,13 +98,14 @@ sealed class PostponedResolvedAtom : ResolvedAtom(), PostponedResolvedAtomMarker
     abstract override val inputTypes: Collection<UnwrappedType>
     abstract override val outputType: UnwrappedType?
     abstract val expectedType: UnwrappedType?
-    var returnValueVariable: NewTypeVariable? = null
-    var parameters3: List<List<UnwrappedType?>>? = null
 }
 
 interface PostponedAtomWithRevisableExpectedType {
     var areParameterTypesLooked: Boolean
     var revisedExpectedType: UnwrappedType?
+    val expectedType: UnwrappedType?
+    val atom: PostponableKotlinCallArgument
+    var parameters3: List<List<KotlinType?>>?
 }
 
 class LambdaWithTypeVariableAsExpectedTypeAtom(
@@ -116,6 +117,7 @@ class LambdaWithTypeVariableAsExpectedTypeAtom(
 
     override var areParameterTypesLooked = false
     override var revisedExpectedType: UnwrappedType? = null
+    override var parameters3: List<List<KotlinType?>>? = null
 
     fun setAnalyzed(resolvedLambdaAtom: ResolvedLambdaAtom) {
         setAnalyzedResults(listOf(resolvedLambdaAtom))
@@ -191,6 +193,7 @@ class PostponedCallableReferenceAtom(
     override var areParameterTypesLooked = false
 
     override var revisedExpectedType: UnwrappedType? = null
+    override var parameters3: List<List<KotlinType?>>? = null
 }
 
 class ResolvedCollectionLiteralAtom(
